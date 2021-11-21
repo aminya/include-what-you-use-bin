@@ -1,6 +1,8 @@
-# Include What You Use #
+# Include What You Use Binaries #
 
-[![IWYU CI](https://github.com/include-what-you-use/include-what-you-use/actions/workflows/ci.yml/badge.svg)](https://github.com/include-what-you-use/include-what-you-use/actions/workflows/ci.yml)
+[![IWYU CI](https://github.com/aminya/include-what-you-use-bin/actions/workflows/ci.yml/badge.svg)](https://github.com/aminya/include-what-you-use-bin/actions/workflows/ci.yml)
+
+# This fork provides binaries for include-what-you-use
 
 For more in-depth documentation, see [docs](docs).
 

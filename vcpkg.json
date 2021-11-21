@@ -1,0 +1,18 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+    "name": "robotics",
+    "version-string": "0.1.0",
+    "builtin-baseline": "b963638b5fd08bc1b20cc603bd92e0d6e3d24565",
+    "dependencies": [
+        {
+            "name": "zlib",
+            "version>=": "1.2.11#13",
+            "default-features": true
+        },
+        {
+            "name": "z3",
+            "version>=": "4.8.12",
+            "default-features": true
+        }
+    ]
+}

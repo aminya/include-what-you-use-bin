@@ -9,47 +9,42 @@ defaults:
     shell: bash
 
 jobs:
-  build:
-    runs-on: ubuntu-18.04
+  Test:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-
-    env:
-      LLVM_TAG:
-
+      matrix:
+        os:
+          - windows-2019
+          - ubuntu-20.04
+          - macos-10.15
     steps:
-      - name: Install prerequisites
-        run: |
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic$LLVM_TAG main"
-          sudo apt update
-          sudo apt install -y ninja-build
-          # Remove any base dist LLVM/Clang installations
-          sudo apt remove -y "libclang-dev*"
-          sudo apt remove -y "clang*"
-          sudo apt remove -y "llvm*"
-          # Reinstall tagged versions
-          sudo apt install -y llvm$LLVM_TAG-dev
-          sudo apt install -y libclang$LLVM_TAG-dev
-          sudo apt install -y clang$LLVM_TAG
+      - name: Setup Mingw
+        if: contains(matrix.os, 'windows')
+        uses: aminya/setup-cpp@v1
+        with:
+          gcc: true
 
-      - name: Broken packaging workaround
-        run: |
-          sudo touch /usr/lib/llvm-14/lib/libclang-14.so.14.0.0
+      - name: Setup Clang, CMake, Ninja
+        uses: aminya/setup-cpp@v1
+        with:
+          compiler: llvm-13.0.0
+          cmake: true
+          ninja: true
 
       - name: Check out default branch
         uses: actions/checkout@v2
 
+      - name: Build include-what-you-use Windows
+        if: contains(matrix.os, 'windows')
+        run: |
+          cmake -S ./ -B ./build -G "MinGW Makefiles" -DCMAKE_INSTALL_PREFIX=~/llvm
+          cmake --build ./build --config Release
+
       - name: Build include-what-you-use
         run: |
-          mkdir build
-          cd ./build
-          cmake -G Ninja \
-                -DCMAKE_C_COMPILER=clang$LLVM_TAG \
-                -DCMAKE_CXX_COMPILER=clang++$LLVM_TAG \
-                -DCMAKE_INSTALL_PREFIX=./ \
-                ../
-          ninja
+          cmake -S ./ -B ./build -G Ninja -DCMAKE_INSTALL_PREFIX=~/llvm -DCMAKE_FIND_FRAMEWORK=LAST
+          cmake --build ./build --config Release
 
       - name: Test include-what-you-use
         run: |
@@ -65,3 +60,10 @@ jobs:
         run: |
           git ls-tree --full-tree --name-only -r HEAD | \
               xargs ./iwyu-check-license-header.py
+
+      - name: Upload Binaries
+        uses: actions/upload-artifact@v2
+        with:
+          path: |
+            ./build
+          retention-days: 1

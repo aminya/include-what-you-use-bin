@@ -1,5 +1,16 @@
 cmake_minimum_required(VERSION 3.4.3)
 
+set(CMAKE_CXX_STANDARD 17)
+
+# Add ProjectOptions v0.7.0
+# https://github.com/aminya/ProjectOptions
+include(FetchContent)
+FetchContent_Declare(projectoptions URL https://github.com/aminya/ProjectOptions/archive/refs/tags/v0.7.0.zip)
+FetchContent_MakeAvailable(projectoptions)
+include(${projectoptions_SOURCE_DIR}/Index.cmake)
+
+run_vcpkg()
+
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   message(STATUS "IWYU: out-of-tree configuration")
   set(IWYU_IN_TREE OFF)
@@ -16,8 +27,17 @@ if (NOT IWYU_IN_TREE)
 
   project(include-what-you-use)
 
-  find_package(LLVM CONFIG REQUIRED)
-  find_package(Clang CONFIG REQUIRED)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    find_package(ZLIB REQUIRED)
+    find_package(Z3 CONFIG REQUIRED)
+    link_libraries(ZLIB::ZLIB z3::libz3)
+    add_definitions(-DNOMINMAX)
+    file(DOWNLOAD "https://github.com/laristra/cinch/raw/master/cmake/FindLLVM.cmake" ${CMAKE_BINARY_DIR}/FindLLVM.cmake)
+    file(DOWNLOAD "https://github.com/laristra/cinch/raw/master/cmake/FindClang.cmake" ${CMAKE_BINARY_DIR}/FindClang.cmake)
+  endif()
+
+  find_package(LLVM REQUIRED)
+  find_package(Clang REQUIRED)
 
   list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR})
   include(AddLLVM)
