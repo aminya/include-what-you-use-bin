@@ -1,53 +1,85 @@
 name: IWYU CI
 
 on:
-  - push
-  - pull_request
+  pull_request:
+  push:
+  release:
+    types: [published]
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  build:
-    runs-on: ubuntu-18.04
+  Test:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-
-    env:
-      LLVM_TAG: -12
-
+      matrix:
+        include:
+          - os: windows-2019
+            llvm: 12.0.1
+            generator: "MinGW Makefiles"
+          - os: ubuntu-20.04
+            llvm: 12.0.1
+            generator: "Ninja"
+          - os: macos-10.15
+            llvm: 12.0.0
+            generator: "Ninja"
     steps:
-      - name: Install prerequisites
-        run: |
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic$LLVM_TAG main"
-          sudo apt update
-          sudo apt install -y ninja-build
-          # Remove any base dist LLVM/Clang installations
-          sudo apt remove -y "libclang-dev*"
-          sudo apt remove -y "clang*"
-          sudo apt remove -y "llvm*"
-          # Reinstall tagged versions
-          sudo apt install -y llvm$LLVM_TAG-dev
-          sudo apt install -y libclang$LLVM_TAG-dev
-          sudo apt install -y clang$LLVM_TAG
+      - name: Cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/llvm
+            ~/vcpkg
+            ./build/vcpkg_installed
+            ${{ env.HOME }}/.cache/vcpkg/archives
+            ${{ env.XDG_CACHE_HOME }}/vcpkg/archives
+            ${{ env.LOCALAPPDATA }}\vcpkg\archives
+            ${{ env.APPDATA }}\vcpkg\archives
+          key: ${{ matrix.os }}-${{ matrix.llvm }}-${{ matrix.generator }}-${{ hashFiles('./CMakeLists.txt') }}-${{ hashFiles('./vcpkg.json')}}
+          restore-keys: |
+            ${{ matrix.os }}-${{ matrix.llvm }}
 
-      - name: Check out default branch
-        uses: actions/checkout@v2
+      - name: Setup Clang, CMake, Ninja
+        uses: aminya/setup-cpp@v1
+        with:
+          llvm: ${{ matrix.llvm }}
+          cmake: true
+          ninja: true
 
-      - name: Build include-what-you-use
+      - name: Download LLVM Source
+        if: contains(matrix.os, 'windows')
+        shell: pwsh
         run: |
-          mkdir build
-          cd ./build
-          cmake -G Ninja \
-                -DCMAKE_C_COMPILER=clang$LLVM_TAG \
-                -DCMAKE_CXX_COMPILER=clang++$LLVM_TAG \
-                -DCMAKE_INSTALL_PREFIX=./ \
-                ../
-          ninja
+          curl -LJO https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ matrix.llvm }}/llvm-project-${{ matrix.llvm }}.src.tar.xz
+          7z x llvm-project-${{ matrix.llvm }}.src.tar.xz
+          7z x llvm-project-${{ matrix.llvm }}.src.tar
+          mv ./llvm-project-${{ matrix.llvm }}.src ./llvm-project
+          mv -force ./llvm-project/llvm ~/
+          mv -force ./llvm-project/clang ~/llvm
+          rm -force llvm-project-${{ matrix.llvm }}.src.tar*
+          ls ~/llvm
+
+      - uses: actions/checkout@v2
+
+      - name: Configure Build
+        run: |
+          cmake -S ./ -B ./build -G '${{ matrix.generator }}' -DCMAKE_PREFIX_PATH="${{ env.LLVM_PATH }};${{ env.LLVM_PATH }}/cmake/modules;${{ env.LLVM_PATH }}/clang;${{ env.LLVM_PATH }}/clang/cmake/modules;" -DCMAKE_INSTALL_PREFIX="${{ env.LLVM_PATH }}" -DCMAKE_FIND_FRAMEWORK=LAST -DLLVM_ENABLE_Z3_SOLVER:BOOL=OFF
+
+      - name: Debug Build
+        if: github.event_name != 'release'
+        run: |
+          cmake --build ./build --config Debug
+
+      - name: Release Build
+        if: github.event_name == 'release'
+        run: |
+          cmake --build ./build --config Release
 
       - name: Test include-what-you-use
+        if: contains(matrix.os, 'ubuntu')
         run: |
           cd ./build
           CTEST_OUTPUT_ON_FAILURE=1 ctest -j 6
@@ -61,3 +93,10 @@ jobs:
         run: |
           git ls-tree --full-tree --name-only -r HEAD | \
               xargs ./iwyu-check-license-header.py
+
+      - name: Upload Binaries
+        uses: actions/upload-artifact@v2
+        with:
+          path: |
+            ./build
+          retention-days: 1
